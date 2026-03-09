@@ -1,0 +1,109 @@
+*.suo
+*.sdf
+*.ncb
+*.log
+*.pdb
+*.obj
+*.vs
+*.APS
+*.user
+# IDE files
+/.idea
+# Meson files
+*.wraplock
+
+compile_commands.json
+**/.ccls-cache
+**/.cache
+**/.clangd
+
+
+**/build*
+
+/enc_temp_folder
+
+.vs/
+/.idea
+/_Bin
+/NATPunchServer/Server/NATCompleteServer/Debug
+/NATPunchServer/Server/NATCompleteServer/Release
+/Documentation/Doxygen/Output
+MemCleanupInfo.txt
+RTEA.vcxproj.user
+.DS_Store
+.vscode
+# Linker output
+*.ilk
+
+# Compiled Lua sources
+luac.out
+
+# luarocks build files
+*.src.rock
+*.zip
+*.tar.gz
+
+# Object files
+*.o
+*.os
+*.ko
+*.obj
+*.elf
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+*.def
+*.exp
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+*.bat
+CortexCommand
+CortexCommand_debug
+CortexCommand.AppImage
+
+# Debug databases
+*.pdb
+
+# Manifest files
+*.manifest
+
+**/desktop.ini
+
+# MacOS stuff
+.DS_Store
+
+# CortexCommand user files
+Screen[sS]hots/
+Mods/
+User[dD]ata/
+
+allegro.log
+AbortScreen.*
+AbortLog.txt
+MemCleanupInfo.txt
+LogPublish.txt
+LogLoading.txt
+LogLoadingWarning.txt
+LogConsole.txt
+Console.dump.log
+Console.input.log
+imgui.ini

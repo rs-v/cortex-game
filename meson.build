@@ -1,0 +1,282 @@
+project('Cortex-Command-Community-Project', ['cpp','c'], subproject_dir: 'external/sources', default_options:['cpp_std=c++20', 'buildtype=release', 'default_library=static'], version:'7.0.0-dev', meson_version:'>=1.6.0')
+
+#### Build environment Setup ####
+
+compiler = meson.get_compiler('cpp')
+cmake = import('cmake')
+deps=[]
+
+elfname = 'CortexCommand'
+build_rpath = ''
+link_args=[]
+extra_args=[]
+preprocessor_flags = []
+override_options = []
+suffix=''
+
+if compiler.get_id() == 'clang'
+  warning('LLVM clang is not directly supported due to missing features of the clang standard library. Remember to set cpp_std to gnu++20 or force libstdc++ otherwise (std::execution)')
+endif
+
+if host_machine.system() == 'darwin' and get_option('b_lto')
+  error('LTO is currently unsupported on macos. Please disable with meson configure -Db_lto=false')
+endif
+
+if get_option('debug') and get_option('b_lto')
+  warning('Link time optimization enabled in debug mode, debug symbols may not be fully available. Disable b_lto with "meson configure -Db_lto=false".')
+endif
+
+if compiler.get_argument_syntax()== 'gcc' # used for gcc compatible compilers
+  # Build against system libraries on linux
+  message('gcc detected')
+
+  if host_machine.system() == 'linux'
+    build_rpath = '$ORIGIN:$ORIGIN/../external/lib/linux/x86_64' # Set RUNPATH so that CCCP can find libfmod.so without needing to set LD_LIBRARY_PATH
+  elif host_machine.system()=='darwin'
+    build_rpath = '@executable_path/../external/lib/macos' # Add a new R_PATH CCCP can find libfmod.dylib on Darwin TODO: Confirm and validate this.
+  endif
+
+  #suffix = 'x86_64'
+  if host_machine.system()=='linux'
+    link_args += ['-Wl,--enable-new-dtags'] # Set RUNPATH instead of RPATH
+  endif
+
+  # Set preprocessor flags and cpp arguments according to build options
+  buildtype_debug = get_option('debug')
+  if buildtype_debug
+
+    extra_args += ['-Wno-write-strings', '-Wno-unknown-pragmas', '-Wno-deprecated-declarations', '-Wno-misleading-indentation'] # Disable #pragma region complaints and luabind auto_ptr warning
+
+    if get_option('sane_warnings')
+      extra_args += ['-Wno-sign-compare', '-Wno-non-virtual-dtor', '-Wno-parentheses', '-Wno-overloaded-virtual', '-Wno-unused-variable', '-Wno-unused-function']
+    endif
+
+    debug_type = get_option('debug_type')
+    if debug_type == 'release'
+      preprocessor_flags += ['-DRELEASE_BUILD'] # enable minimal debug features
+    elif debug_type == 'minimal'
+      preprocessor_flags += ['-DMIN_DEBUG_BUILD', '-DDEBUGMODE'] # enable some debug features
+    elif debug_type == 'full'
+      preprocessor_flags += ['-DDEBUG_BUILD', '-DDEBUGMODE'] # enable all debug features; may slow down game
+    endif
+  else
+    extra_args = ['-w'] # Disable all warnings for release builds
+    preprocessor_flags += ['-DRELEASE_BUILD', '-DNDEBUG'] # disable all debug features
+  endif
+  if compiler.get_id() =='gcc' and compiler.version().version_compare('<9')
+    link_args += ['-lstdc++fs']
+  endif
+elif compiler.get_argument_syntax()== 'msvc'
+#TODO: add MSVC related arguments and stuff in here
+  message('cl detected')
+  elfname = 'Cortex Command'
+  extra_args += ['-D_HAS_ITERATOR_DEBUGGING=0', '-D_HAS_AUTO_PTR_ETC=1', '-bigobj']
+  add_global_arguments('-D_ITERATOR_DEBUG_LEVEL=0', language:'cpp')
+  add_project_link_arguments(['winmm.lib', 'ws2_32.lib', 'dinput8.lib', 'ddraw.lib', 'dxguid.lib', 'dsound.lib', 'dbghelp.lib'], language:'cpp')
+  if host_machine.cpu_family() == 'x86'
+    elfname += ' x86'
+  endif
+  preprocessor_flags += [
+    '-D_CRT_SECURE_NO_DEPRECATE',
+    '-D_WINDOWS',
+    '-DWIN32',
+    '-DWIN32_LEAN_AND_MEAN',
+    '-DNOMINMAX',
+    '-DNOGDI',
+    '-DNOKERNEL',
+    '-DNONLS',
+    '-DNOMEMMGR',
+    '-DNOGDICAPMASKS',
+    '-DNOVIRTUALKEYCODES',
+    '-DNOWINMESSAGES',
+    '-DNOWINSTYLES',
+    '-DNOMETAFILE',
+    '-DNOSCROLL',
+    '-DNOTEXTMETRIC',
+    '-DNOCOMM',
+    '-DNOKANJI',
+    '-DNOHELP',
+    '-DNOPROFILER',
+    '-DNODEFERWINDOWPOS',
+    '-DNOMCX',
+    '-DNOMENUS',
+    '-DNOICONS',
+    '-DNOKEYSTATES',
+    '-DNOSYSCOMMANDS',
+    '-DNORASTEROPS',
+    '-DNOSHOWWINDOW',
+    '-DOEMRESOURCE',
+    '-DNOATOM',
+    '-DNODRAWTEXT',
+    '-DNOCOLOR',
+    '-DNOCTLMGR',
+    '-DNOMSG',
+    '-DNOOPENFILE',
+    '-DNOSERVICE',
+    '-DNOSOUND',
+    '-DNOWH',
+    '-DNOWINOFFSETS'
+  ]
+  link_args+=['-ignore:4099', '-ignore:4217']
+  buildtype_debug = get_option('debug')
+  if buildtype_debug
+    debug_type = get_option('debug_type')
+    if debug_type == 'release'
+      preprocessor_flags += ['-DDEBUG_RELEASE_BUILD'] # enable minimal debug features
+    elif debug_type == 'minimal'
+      preprocessor_flags += ['-DDEBUGMODE'] # enable some debug features
+    elif debug_type == 'full'
+      preprocessor_flags += ['-DDEBUG_BUILD', '-DDEBUGMODE'] # enable all debug features; may slow down game
+    endif
+  else
+    preprocessor_flags += ['-DRELEASE_BUILD', '-DNDEBUG']
+  endif
+else
+  error('Using unknown compiler, please use gcc or msvc compatible compilers')
+endif
+add_project_arguments(preprocessor_flags, extra_args, language:'cpp')
+add_project_link_arguments(link_args, language:'cpp')
+
+#### Configuration ####
+conf_data = configuration_data()
+prefix = get_option('prefix')
+
+conf_data.set_quoted('BASEDATAPATH', prefix/get_option('data_install_dir'))
+conf_data.set('game_version', meson.project_version())
+
+if suffix==''
+  suffix=[]
+  conf_data.set('EXENAME', elfname)
+else
+  conf_data.set('EXENAME', elfname + '.' + suffix)
+endif
+if get_option('install_runner')
+  conf_data.set('EXERUNNER', 'CortexCommand')
+  conf_data.set('EXEPATH', prefix/get_option('libdir')/'CortexCommand')
+else
+  conf_data.set('EXERUNNER', conf_data.get('EXENAME'))
+  conf_data.set('EXEPATH', prefix/get_option('bindir'))
+endif
+
+if get_option('tracy_enable')
+  add_global_arguments('-DTRACY_ENABLE', language:'cpp')
+endif
+if get_option('tracy_callstack') > 0
+  add_global_arguments('-DTRACY_CALLSTACK='+get_option('tracy_callstack').to_string(), language:'cpp')
+endif
+if get_option('tracy_on_demand')
+  add_global_arguments('-DTRACY_ON_DEMAND', language:'cpp')
+endif
+if get_option('tracy_debuginfod')
+  deps += [dependency('libdebuginfod')]
+  add_global_arguments('-DTRACY_DEBUGINFOD', language:'cpp')
+endif
+
+#### Platform Common External Libraries ####
+if host_machine.system() in ['linux','darwin']
+  deps += [
+    #dependency(['sdl3']),
+    #dependency('SDL3_image'),
+    dependency('flac'),
+    dependency('minizip'),
+    dependency('threads'),
+    dependency('liblz4'),
+    dependency('libpng'),
+    dependency('tbb'),
+    dependency('gl')
+  ]
+  if host_machine.system()=='darwin'
+    deps += dependency('appleframeworks', modules: ['Foundation'])  
+  endif
+  bfd = compiler.find_library('bfd', required: false)
+  if bfd.found()
+    preprocessor_flags += '-DBACKWARD_HAS_BFD'
+    deps += bfd
+  endif
+elif host_machine.system() == 'windows'
+  zlib = subproject('zlib-ng-2.1.3')
+  zlib_dep = dependency('zlib')
+  minizip = subproject('minizip-ng-4.0.0')
+  minizip_dep = dependency('minizip')
+  libpng = subproject('libpng-1.6.40')
+  libpng_dep = dependency('libpng')
+  # Windows Libraries
+  opengl = compiler.find_library('opengl32')
+  deps += [zlib_dep, minizip_dep, libpng_dep, opengl]
+endif
+
+
+external_objects = []
+external_libs = []
+subdir('external')
+
+sdl3_opt = cmake.subproject_options()
+sdl3_opt.add_cmake_defines({'CMAKE_POSITION_INDEPENDENT_CODE': get_option('b_staticpic'), 'BUILD_SHARED_LIBS':false, 'BUILD_STATIC_LIBS': true})
+sdl3_opt.append_compile_args('c','-DUSE_XINPUT2_KEYBOARD')
+if host_machine.system() == 'darwin'
+  sdl3_dep = dependency('sdl3')
+else
+  sdl3_proj = cmake.subproject('SDL3-3.2.10', options: sdl3_opt)
+  sdl3_dep = sdl3_proj.dependency('SDL3-static')
+  meson.override_dependency('sdl3', sdl3_dep)
+endif
+
+sdl3_image_proj = subproject('SDL3_image-3.2.4')
+sdl3_image_dep = sdl3_image_proj.get_variable('sdl3_image_dep')
+
+boost_dep = declare_dependency(include_directories: include_directories('external/include/boost_1_75'))
+meson.override_dependency('boost-175', boost_dep)
+install_rpath = prefix/get_option('fmod_dir')
+tracy_proj = subproject('tracy')
+tracy_dep = dependency('tracy')
+allegro_proj = subproject('allegro 4.4.3.1-custom')
+luajit_proj = subproject('LuaJIT-2.1')
+luajit_dep = dependency('luajit')
+external_inc_dirs += luajit_proj.get_variable('luajit_source_dir')
+allegro_dep = dependency('allegro')
+loadpng_dep = dependency('loadpng')
+luabind_proj = subproject('luabind-0.7.1')
+luabind_dep = dependency('luabind')
+raknet_proj = subproject('RakNet')
+raknet_dep = dependency('RakNet')
+deps += [sdl3_dep, sdl3_image_dep, allegro_dep, luajit_dep, loadpng_dep, raknet_dep, boost_dep, tracy_dep]
+
+#### Sources Setup ####
+source_inc_dirs = []
+subdir('Source')
+subdir('Resources')
+
+
+#### Target Definitions ####
+cccpelf = executable(
+  elfname, ['Source/Main.cpp', sources], include_directories:[source_inc_dirs, external_inc_dirs], cpp_pch:pch, # Sources options
+  link_with:[external_libs, source_libs], objects:[external_objects], dependencies:deps,                                # Link options
+  cpp_args:[extra_args, preprocessor_flags], link_args:[link_args], build_rpath:build_rpath,               # Compiler setup
+  name_suffix:suffix,   # Executable name options
+  build_by_default:true, # Meson options
+  install: true, install_rpath: install_rpath, install_dir: get_option('install_runner') ? get_option('libdir')/'CortexCommand' : get_option('bindir'),
+  win_subsystem:'windows', # Windows mark as GUI app
+)
+
+
+#### Installing #####
+base_exclude_files = [
+  'Base.rte/Settings.ini',
+  'Launch Actor Editor.bat',
+  'Launch Area Editor.bat',
+  'Launch Assembly Editor.bat',
+  'Launch Gib Editor.bat',
+  'Launch Scene Editor.bat',
+  'LogConsole.txt',
+  'LogLoading.txt',
+  'LogLoadingWarning.txt',
+  'Start Dedicated Server.bat'
+]
+
+if get_option('install_data')
+install_subdir('Data',
+               exclude_directories:['.git', '.github'],
+               exclude_files:base_exclude_files,
+               install_dir:get_option('data_install_dir')/'Data',
+               strip_directory:true)
+endif
