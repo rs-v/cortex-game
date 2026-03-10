@@ -122,3 +122,18 @@ The soldier movement system is **not traditional animation**. It is a **physics-
 3. 行走路径实时适应地形坡度
 4. 脚通过物理碰撞（AtomGroup）与地形交互
 5. 移动时对地面施加物理力
+
+## Standing Balance / 站立平衡
+
+The soldier's two-leg balance is maintained by a **rotational spring** that pulls the body back to an upright angle each frame, combined with **ground reaction forces** from both feet pushing against the terrain.
+
+士兵的双腿平衡由**旋转弹簧**（每帧将躯体拉回直立角度）和**两脚踩地产生的支持力**共同维持：
+
+```cpp
+// AHuman::Update() — rotational spring
+m_AngularVel = m_AngularVel * 0.98F - (rotDiff * 0.5F);
+```
+
+For a Godot implementation of this system, see [`Documentation/GodotSoldierImplementation_CN.md`](GodotSoldierImplementation_CN.md).
+
+关于 Godot 实现方法，请参阅 [`Documentation/GodotSoldierImplementation_CN.md`](GodotSoldierImplementation_CN.md)。
